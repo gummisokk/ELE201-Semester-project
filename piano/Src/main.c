@@ -42,6 +42,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
 DAC_HandleTypeDef hdac;
 
@@ -54,14 +56,18 @@ TIM_HandleTypeDef htim2;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_DAC_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+volatile uint16_t pot_value[0];
 
 /* USER CODE END 0 */
 
@@ -96,12 +102,14 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_DAC_Init();
   MX_TIM2_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
-
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)pot_value, 1);
   HAL_TIM_Base_Start(&htim2);
 
   // Get current time (microseconds)
@@ -124,6 +132,13 @@ int main(void)
     double factor = (double)2.0 * M_PI * x;
     int notes = 0;
 
+    //get pot value
+    uint32_t pot = pot_value[0];
+    double detune = 0.5 + (double)(pot_value[0]/4095.0f);
+    detune = round(detune *100.0)/100;
+
+    factor *= detune;
+    
     if (HAL_GPIO_ReadPin(KEY_3_GPIO_Port, KEY_3_Pin)){ //KEY ON THE FAR LEFT
       //A's an octive apart
       signal += (double)1.0 + sin(factor * 440.0);//440hz
@@ -163,9 +178,10 @@ int main(void)
 
     if (HAL_GPIO_ReadPin(KEY_2_GPIO_Port, KEY_2_Pin)){
       //A igjen
-      //signal += (double)1.0 + sin(factor * 440.0);//440hz
-      signal += (double)1.0 + sin(factor * 880.0);//880hz
-      signal += (double)1.0 + sin(factor * 1760.0);//17600hz
+      //signal += (double)1.0 + sin(factor * 440.0);
+      signal += (double)1.0 + sin(factor * 880.0);
+      signal += (double)1.0 + sin(factor * 1760.0);
+      notes++;
     }
 
     if (HAL_GPIO_ReadPin(KEY_0_GPIO_Port, KEY_0_Pin)){
@@ -239,6 +255,58 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_480CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
   * @brief DAC Initialization Function
   * @param None
   * @retval None
@@ -297,7 +365,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 108-1;
+  htim2.Init.Prescaler = 216-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 4294967295;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -320,6 +388,22 @@ static void MX_TIM2_Init(void)
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA2_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA2_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
 }
 
