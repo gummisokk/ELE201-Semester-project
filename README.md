@@ -11,4 +11,4 @@
 |PE4 | knapp|
 |PF8 | knapp|   
 |PA4 | buzzer|
-|PA0 | pot-meter|
+|PA3 | pot-meter|

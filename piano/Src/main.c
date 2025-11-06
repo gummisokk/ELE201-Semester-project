@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "math.h"
+  # include <stdbool.h>
 
 /* USER CODE END Includes */
 
@@ -43,7 +44,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-DMA_HandleTypeDef hdma_adc1;
 
 DAC_HandleTypeDef hdac;
 
@@ -56,7 +56,6 @@ TIM_HandleTypeDef htim2;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
 static void MX_DAC_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
@@ -67,7 +66,6 @@ static void MX_ADC1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-volatile uint16_t pot_value[0];
 
 /* USER CODE END 0 */
 
@@ -81,6 +79,8 @@ int main(void)
   /* USER CODE BEGIN 1 */
 
   volatile uint32_t timer_val;
+  uint16_t pot_value = 2048;
+  uint32_t last_pot_read;
 
   /* USER CODE END 1 */
 
@@ -102,15 +102,14 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_DAC_Init();
   MX_TIM2_Init();
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)pot_value, 1);
   HAL_TIM_Base_Start(&htim2);
+  HAL_ADC_Start(&hadc1);
 
   // Get current time (microseconds)
   timer_val = __HAL_TIM_GET_COUNTER(&htim2);
@@ -126,6 +125,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
     timer_val = __HAL_TIM_GET_COUNTER(&htim2);
     double signal = 0;
     double x = (double)(timer_val / 1000000.0); //timer in seconds 
@@ -133,11 +133,19 @@ int main(void)
     int notes = 0;
 
     //get pot value
-    uint32_t pot = pot_value[0];
-    double detune = 0.5 + (double)(pot_value[0]/4095.0f);
+    uint32_t pot = pot_value;
+    double detune = 0.5 + (double)(pot_value/4095.0f);
     detune = round(detune *100.0)/100;
 
     factor *= detune;
+
+    if (timer_val - last_pot_read > 10000){
+      
+      HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+      pot_value = HAL_ADC_GetValue(&hadc1);
+      HAL_ADC_Start(&hadc1);
+      last_pot_read = timer_val;
+    }
     
     if (HAL_GPIO_ReadPin(KEY_3_GPIO_Port, KEY_3_Pin)){ //KEY ON THE FAR LEFT
       //A's an octive apart
@@ -277,8 +285,8 @@ static void MX_ADC1_Init(void)
   hadc1.Instance = ADC1;
   hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
-  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
-  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
@@ -293,7 +301,7 @@ static void MX_ADC1_Init(void)
 
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Channel = ADC_CHANNEL_3;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SamplingTime = ADC_SAMPLETIME_480CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
@@ -388,22 +396,6 @@ static void MX_TIM2_Init(void)
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
-
-}
-
-/**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA2_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA2_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA2_Stream0_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 
 }
 
